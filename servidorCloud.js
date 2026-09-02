@@ -61,15 +61,7 @@ app.delete('/api/libros/:cod', (req, res) => {
 });
 
 // --- Informacion del servicio ---
-app.get('/', (req, res) => {
-  res.json({
-    servicio: 'Biblioteca SOAP vs REST (enfocado en SOAP)',
-    operaciones: ['ObtenerLibros', 'BuscarLibro', 'RegistrarLibro', 'ActualizarLibro', 'EliminarLibro'],
-    soap: '/soap',
-    wsdl: '/soap?wsdl',
-    rest: '/api/libros'
-  });
-});
+app.use(express.static(path.join(__dirname, 'public')));
 
 // --- SOAP ---
 // La URL publica del servidor se obtiene de la peticion (funciona en cualquier nube)
