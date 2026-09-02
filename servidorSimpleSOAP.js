@@ -8,7 +8,6 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Base de datos simulada en memoria
 let libros = [
   { isbn: "9781234567890", titulo: "El Principito", autor: "Antoine de Saint-Exupéry", total: 5, disponibles: 3 },
   { isbn: "9780132350884", titulo: "Clean Code", autor: "Robert C. Martin", total: 4, disponibles: 1 },
@@ -21,11 +20,10 @@ let prestamos = [
 
 let ultimaTrazaSOAP = {
   operacion: "Ninguna",
-  xmlRequest: "<!-- Esperando interacción -->",
-  xmlResponse: "<!-- Esperando interacción -->"
+  xmlRequest: "<!-- Haz clic en una operación arriba para ver el paquete XML -->",
+  xmlResponse: "<!-- Aquí aparecerá la respuesta XML del servidor -->"
 };
 
-// Contrato WSDL oficial incrustado
 const wsdlXML = `
 <definitions name="BibliotecaService"
   targetNamespace="http://biblioteca.com/soap"
@@ -117,7 +115,6 @@ const wsdlXML = `
 </definitions>
 `;
 
-// Implementación del Servicio SOAP
 const servicioSOAP = {
   BibliotecaService: {
     BibliotecaPort: {
@@ -157,7 +154,6 @@ const servicioSOAP = {
   }
 };
 
-// Cliente SOAP interno
 function invocarSOAP(accion, args) {
   return new Promise((resolve, reject) => {
     const host = process.env.RENDER_EXTERNAL_URL || 'http://localhost:' + PORT;
@@ -169,10 +165,14 @@ function invocarSOAP(accion, args) {
       client[accion](args, function(err, result, rawResponse, soapHeader, rawRequest) {
         if (err) return reject(err);
 
+        // Limpiar para mostrar limpio sin escapar duplicado
+        const cleanReq = rawRequest ? rawRequest.replace(/</g, '&lt;').replace(/>/g, '&gt;') : 'No disponible';
+        const cleanRes = rawResponse ? rawResponse.replace(/</g, '&lt;').replace(/>/g, '&gt;') : 'No disponible';
+
         ultimaTrazaSOAP = {
           operacion: accion,
-          xmlRequest: rawRequest ? rawRequest.replace(/</g, '&lt;').replace(/>/g, '&gt;') : 'No disponible',
-          xmlResponse: rawResponse ? rawResponse.replace(/</g, '&lt;').replace(/>/g, '&gt;') : 'No disponible'
+          xmlRequest: cleanReq,
+          xmlResponse: cleanRes
         };
 
         resolve(result);
@@ -181,7 +181,6 @@ function invocarSOAP(accion, args) {
   });
 }
 
-// Rutas Express
 app.get('/api/libros', async (req, res) => {
   try {
     const respuesta = await invocarSOAP('ObtenerLibros', {});
@@ -230,7 +229,6 @@ app.get('/api/traza', (req, res) => {
   res.json(ultimaTrazaSOAP);
 });
 
-// Interfaz Gráfica Educativa
 app.get('/', (req, res) => {
   res.send(`
     <!DOCTYPE html>
@@ -270,13 +268,15 @@ app.get('/', (req, res) => {
             .code-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 15px; }
             @media (max-width: 768px) { .code-grid { grid-template-columns: 1fr; } }
             
-            pre { background: #0f172a; padding: 15px; border-radius: 6px; overflow-x: auto; font-size: 12px; color: #34d399; border: 1px solid var(--border); margin: 0; max-height: 250px; }
+            pre { background: #0f172a; padding: 15px; border-radius: 6px; overflow-x: auto; font-size: 12px; color: #34d399; border: 1px solid var(--border); margin: 0; max-height: 250px; white-space: pre-wrap; word-break: break-all; }
             
             .links-section { margin-top: 20px; display: flex; gap: 15px; }
             .links-section a { color: #38bdf8; text-decoration: none; font-weight: 500; }
             .links-section a:hover { text-decoration: underline; }
             
             input, select { background: #0f172a; border: 1px solid var(--border); color: white; padding: 8px; border-radius: 6px; width: 100%; box-sizing: border-box; margin-bottom: 10px; }
+            
+            .explanation-box { background: #0f172a; border-left: 4px solid #38bdf8; padding: 15px; margin: 15px 0; border-radius: 0 6px 6px 0; font-size: 14px; color: #cbd5e1; }
         </style>
     </head>
     <body>
@@ -319,8 +319,13 @@ app.get('/', (req, res) => {
 
             <div class="educational-panel">
                 <h2>🔍 ¿Dónde está SOAP? (Panel de Inspección XML)</h2>
-                <p>Durante la exposición, puedes observar el flujo exacto de comunicación: la interfaz web hace una petición HTTP al backend en Express, y el backend <strong>se comunica con el servicio SOAP enviando y recibiendo XML Envelope crudo</strong>.</p>
                 
+                <!-- EXPLICACIÓN RÁPIDA PARA LA EXPOSICIÓN -->
+                <div class="explanation-box">
+                    <strong>💡 ¿Cómo funciona esto?</strong> 
+                    Cuando haces clic en un botón, la interfaz web pide la acción al backend en Express. En lugar de usar JSON moderno, <strong>el backend se conecta al servicio SOAP empaquetando los datos en un sobre XML estricto (Request)</strong> y recibe de vuelta otro paquete en XML (Response). Abajo puedes ver el tráfico real en vivo.
+                </div>
+
                 <div class="flow-diagram">
                     <div class="flow-step">1. Usuario (Frontend)</div>
                     <div>➔</div>
@@ -392,8 +397,14 @@ app.get('/', (req, res) => {
             async function actualizarTraza(traza) {
                 if(!traza) return;
                 document.getElementById('lbl-operacion').innerText = traza.operacion;
-                document.getElementById('xml-req').innerText = traza.xmlRequest;
-                document.getElementById('xml-res').innerText = traza.xmlResponse;
+                // Decodificar entidades HTML para mostrarlas limpias y legibles en el <pre>
+                const txtReq = document.createElement('textarea');
+                txtReq.innerHTML = traza.xmlRequest;
+                document.getElementById('xml-req').innerText = txtReq.value;
+
+                const txtRes = document.createElement('textarea');
+                txtRes.innerHTML = traza.xmlResponse;
+                document.getElementById('xml-res').innerText = txtRes.value;
             }
 
             async function soapDisponibilidad() {
