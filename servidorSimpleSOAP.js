@@ -8,6 +8,9 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// =========================================================================
+// 1. BASE DE DATOS EN MEMORIA (Sistema de Biblioteca)
+// =========================================================================
 let libros = [
   { isbn: "9781234567890", titulo: "El Principito", autor: "Antoine de Saint-Exupéry", total: 5, disponibles: 3 },
   { isbn: "9780132350884", titulo: "Clean Code", autor: "Robert C. Martin", total: 4, disponibles: 1 },
@@ -20,10 +23,13 @@ let prestamos = [
 
 let ultimaTrazaSOAP = {
   operacion: "Ninguna",
-  xmlRequest: "<!-- Haz clic en una operación arriba para ver el paquete XML -->",
+  xmlRequest: "<!-- Haz clic en una operación SOAP arriba -->",
   xmlResponse: "<!-- Aquí aparecerá la respuesta XML del servidor -->"
 };
 
+// =========================================================================
+// 2. CONTRATO WSDL OFICIAL (Define qué operaciones existen y sus tipos)
+// =========================================================================
 const wsdlXML = `
 <definitions name="BibliotecaService"
   targetNamespace="http://biblioteca.com/soap"
@@ -115,12 +121,17 @@ const wsdlXML = `
 </definitions>
 `;
 
+// =========================================================================
+// 3. LÓGICA DE NEGOCIO DEL SERVICIO SOAP
+// =========================================================================
 const servicioSOAP = {
   BibliotecaService: {
     BibliotecaPort: {
+      
       ObtenerLibros: function(args, cb, headers, req) {
         return { LibrosJson: JSON.stringify(libros) };
       },
+
       ConsultarDisponibilidad: function(args, cb, headers, req) {
         const libro = libros.find(l => l.isbn === args.isbn);
         if (!libro) {
@@ -128,15 +139,23 @@ const servicioSOAP = {
         }
         return { disponible: libro.disponibles > 0, cantidad: libro.disponibles, titulo: libro.titulo };
       },
+
       RegistrarPrestamo: function(args, cb, headers, req) {
         const libro = libros.find(l => l.isbn === args.isbn);
         if (!libro || libro.disponibles <= 0) {
           return { exito: false, mensaje: "No hay ejemplares disponibles para préstamo." };
         }
         libro.disponibles -= 1;
-        prestamos.push({ id: prestamos.length + 1, isbn: args.isbn, usuario: args.usuario || "Usuario General", fecha: new Date().toISOString().split('T')[0], estado: "Activo" });
+        prestamos.push({ 
+          id: prestamos.length + 1, 
+          isbn: args.isbn, 
+          usuario: args.usuario || "Usuario General", 
+          fecha: new Date().toISOString().split('T')[0], 
+          estado: "Activo" 
+        });
         return { exito: true, mensaje: "Préstamo registrado con éxito para " + (args.usuario || 'Usuario') + "." };
       },
+
       RegistrarDevolucion: function(args, cb, headers, req) {
         const libro = libros.find(l => l.isbn === args.isbn);
         if (!libro) {
@@ -150,10 +169,14 @@ const servicioSOAP = {
         if (prestamoActivo) prestamoActivo.estado = "Devuelto";
         return { exito: true, mensaje: "Devolución registrada correctamente." };
       }
+
     }
   }
 };
 
+// =========================================================================
+// 4. CLIENTE SOAP INTERNO (Permite a Express consumir su propio SOAP)
+// =========================================================================
 function invocarSOAP(accion, args) {
   return new Promise((resolve, reject) => {
     const host = process.env.RENDER_EXTERNAL_URL || 'http://localhost:' + PORT;
@@ -165,7 +188,7 @@ function invocarSOAP(accion, args) {
       client[accion](args, function(err, result, rawResponse, soapHeader, rawRequest) {
         if (err) return reject(err);
 
-        // Limpiar para mostrar limpio sin escapar duplicado
+        // Limpiar para mostrar XML legible en pantalla
         const cleanReq = rawRequest ? rawRequest.replace(/</g, '&lt;').replace(/>/g, '&gt;') : 'No disponible';
         const cleanRes = rawResponse ? rawResponse.replace(/</g, '&lt;').replace(/>/g, '&gt;') : 'No disponible';
 
@@ -181,6 +204,9 @@ function invocarSOAP(accion, args) {
   });
 }
 
+// =========================================================================
+// 5. RUTAS DEL BACKEND EXPRESS (API / Frontend)
+// =========================================================================
 app.get('/api/libros', async (req, res) => {
   try {
     const respuesta = await invocarSOAP('ObtenerLibros', {});
@@ -229,6 +255,9 @@ app.get('/api/traza', (req, res) => {
   res.json(ultimaTrazaSOAP);
 });
 
+// =========================================================================
+// 6. INTERFAZ GRÁFICA EDUCATIVA (HTML / CSS / JS)
+// =========================================================================
 app.get('/', (req, res) => {
   res.send(`
     <!DOCTYPE html>
@@ -320,7 +349,6 @@ app.get('/', (req, res) => {
             <div class="educational-panel">
                 <h2>🔍 ¿Dónde está SOAP? (Panel de Inspección XML)</h2>
                 
-                <!-- EXPLICACIÓN RÁPIDA PARA LA EXPOSICIÓN -->
                 <div class="explanation-box">
                     <strong>💡 ¿Cómo funciona esto?</strong> 
                     Cuando haces clic en un botón, la interfaz web pide la acción al backend en Express. En lugar de usar JSON moderno, <strong>el backend se conecta al servicio SOAP empaquetando los datos en un sobre XML estricto (Request)</strong> y recibe de vuelta otro paquete en XML (Response). Abajo puedes ver el tráfico real en vivo.
@@ -397,7 +425,7 @@ app.get('/', (req, res) => {
             async function actualizarTraza(traza) {
                 if(!traza) return;
                 document.getElementById('lbl-operacion').innerText = traza.operacion;
-                // Decodificar entidades HTML para mostrarlas limpias y legibles en el <pre>
+                
                 const txtReq = document.createElement('textarea');
                 txtReq.innerHTML = traza.xmlRequest;
                 document.getElementById('xml-req').innerText = txtReq.value;
@@ -460,10 +488,15 @@ app.get('/', (req, res) => {
   `);
 });
 
+// =========================================================================
+// 7. INICIALIZACIÓN DEL SERVIDOR HTTP Y MONTAJE DEL SERVICIO SOAP
+// =========================================================================
 const servidor = http.createServer(app);
 
 servidor.listen(PORT, () => {
   console.log('Servidor ejecutándose en el puerto ' + PORT);
+  
+  // La librería soap enlaza el servidor HTTP con el contrato WSDL y la lógica
   soap.listen(servidor, '/soap', servicioSOAP, wsdlXML, function() {
     console.log('Servicio SOAP WSDL montado correctamente en /soap?wsdl');
   });
