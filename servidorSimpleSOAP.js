@@ -1,7 +1,6 @@
 const express = require('express');
 const soap = require('soap');
 const http = require('http');
-const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -9,9 +8,7 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// ==========================================
-// 1. BASE DE DATOS EN MEMORIA (Sistema Biblioteca)
-// ==========================================
+// Base de datos simulada en memoria
 let libros = [
   { isbn: "9781234567890", titulo: "El Principito", autor: "Antoine de Saint-Exupéry", total: 5, disponibles: 3 },
   { isbn: "9780132350884", titulo: "Clean Code", autor: "Robert C. Martin", total: 4, disponibles: 1 },
@@ -22,16 +19,13 @@ let prestamos = [
   { id: 1, isbn: "9781234567890", usuario: "Carlos Pérez", fecha: "2026-06-01", estado: "Activo" }
 ];
 
-// Almacén temporal para la última traza SOAP (para el visor educativo en la UI)
 let ultimaTrazaSOAP = {
   operacion: "Ninguna",
   xmlRequest: "<!-- Esperando interacción -->",
   xmlResponse: "<!-- Esperando interacción -->"
 };
 
-// ==========================================
-// 2. CONTRATO WSDL (Definición del Servicio SOAP)
-// ==========================================
+// Contrato WSDL oficial incrustado
 const wsdlXML = `
 <definitions name="BibliotecaService"
   targetNamespace="http://biblioteca.com/soap"
@@ -43,7 +37,6 @@ const wsdlXML = `
   <types>
     <xsd:schema targetNamespace="http://biblioteca.com/soap">
       
-      <!-- Obtener Libros -->
       <xsd:element name="ObtenerLibros"><xsd:complexType/></xsd:element>
       <xsd:element name="ObtenerLibrosResponse">
         <xsd:complexType><xsd:sequence>
@@ -51,7 +44,6 @@ const wsdlXML = `
         </xsd:sequence></xsd:complexType>
       </xsd:element>
 
-      <!-- Consultar Disponibilidad -->
       <xsd:element name="ConsultarDisponibilidad">
         <xsd:complexType><xsd:sequence>
           <xsd:element name="isbn" type="xsd:string"/>
@@ -65,7 +57,6 @@ const wsdlXML = `
         </xsd:sequence></xsd:complexType>
       </xsd:element>
 
-      <!-- Registrar Prestamo -->
       <xsd:element name="RegistrarPrestamo">
         <xsd:complexType><xsd:sequence>
           <xsd:element name="isbn" type="xsd:string"/>
@@ -79,7 +70,6 @@ const wsdlXML = `
         </xsd:sequence></xsd:complexType>
       </xsd:element>
 
-      <!-- Registrar Devolucion -->
       <xsd:element name="RegistrarDevolucion">
         <xsd:complexType><xsd:sequence>
           <xsd:element name="isbn" type="xsd:string"/>
@@ -127,9 +117,7 @@ const wsdlXML = `
 </definitions>
 `;
 
-// ==========================================
-// 3. IMPLEMENTACIÓN DEL SERVICIO SOAP
-// ==========================================
+// Implementación del Servicio SOAP
 const servicioSOAP = {
   BibliotecaService: {
     BibliotecaPort: {
@@ -150,7 +138,7 @@ const servicioSOAP = {
         }
         libro.disponibles -= 1;
         prestamos.push({ id: prestamos.length + 1, isbn: args.isbn, usuario: args.usuario || "Usuario General", fecha: new Date().toISOString().split('T')[0], estado: "Activo" });
-        return { exito: true, mensaje: \`Préstamo registrado con éxito para \${args.usuario || 'Usuario'}.\` };
+        return { exito: true, mensaje: "Préstamo registrado con éxito para " + (args.usuario || 'Usuario') + "." };
       },
       RegistrarDevolucion: function(args, cb, headers, req) {
         const libro = libros.find(l => l.isbn === args.isbn);
@@ -169,10 +157,7 @@ const servicioSOAP = {
   }
 };
 
-// ==========================================
-// 4. CLIENTE SOAP INTERNO (Express consume a SOAP)
-// ==========================================
-// Función auxiliar para invocar nuestro propio servicio SOAP desde las rutas de Express
+// Cliente SOAP interno
 function invocarSOAP(accion, args) {
   return new Promise((resolve, reject) => {
     const host = process.env.RENDER_EXTERNAL_URL || 'http://localhost:' + PORT;
@@ -184,7 +169,6 @@ function invocarSOAP(accion, args) {
       client[accion](args, function(err, result, rawResponse, soapHeader, rawRequest) {
         if (err) return reject(err);
 
-        // Guardar traza educativa
         ultimaTrazaSOAP = {
           operacion: accion,
           xmlRequest: rawRequest ? rawRequest.replace(/</g, '&lt;').replace(/>/g, '&gt;') : 'No disponible',
@@ -197,11 +181,7 @@ function invocarSOAP(accion, args) {
   });
 }
 
-// ==========================================
-// 5. RUTAS DEL BACKEND EXPRESS (API / Frontend)
-// ==========================================
-
-// Endpoint para obtener libros (vía SOAP)
+// Rutas Express
 app.get('/api/libros', async (req, res) => {
   try {
     const respuesta = await invocarSOAP('ObtenerLibros', {});
@@ -212,7 +192,6 @@ app.get('/api/libros', async (req, res) => {
   }
 });
 
-// Endpoint para consultar disponibilidad de un libro (vía SOAP)
 app.post('/api/libros/disponibilidad', async (req, res) => {
   try {
     const { isbn } = req.body;
@@ -223,7 +202,6 @@ app.post('/api/libros/disponibilidad', async (req, res) => {
   }
 });
 
-// Endpoint para registrar préstamo (vía SOAP)
 app.post('/api/prestamos', async (req, res) => {
   try {
     const { isbn, usuario } = req.body;
@@ -234,7 +212,6 @@ app.post('/api/prestamos', async (req, res) => {
   }
 });
 
-// Endpoint para registrar devolución (vía SOAP)
 app.post('/api/devoluciones', async (req, res) => {
   try {
     const { isbn } = req.body;
@@ -245,17 +222,15 @@ app.post('/api/devoluciones', async (req, res) => {
   }
 });
 
-// Endpoint para ver préstamos activos
 app.get('/api/prestamos', (req, res) => {
   res.json({ ok: true, prestamos });
 });
 
-// Endpoint para obtener la última traza SOAP educativa
 app.get('/api/traza', (req, res) => {
   res.json(ultimaTrazaSOAP);
 });
 
-// Interfaz Gráfica Educativa Completa (Frontend integrado)
+// Interfaz Gráfica Educativa
 app.get('/', (req, res) => {
   res.send(`
     <!DOCTYPE html>
@@ -286,7 +261,6 @@ app.get('/', (req, res) => {
             th, td { padding: 10px; text-align: left; border-bottom: 1px solid var(--border); }
             th { color: #94a3b8; }
 
-            /* Panel Educativo SOAP */
             .educational-panel { background: var(--card); border: 2px dashed #0284c7; border-radius: 12px; padding: 25px; margin-top: 30px; }
             .educational-panel h2 { color: #38bdf8; margin-top: 0; }
             
@@ -312,16 +286,13 @@ app.get('/', (req, res) => {
                 <p>Demostración interactiva de arquitectura orientada a servicios utilizando contratos WSDL y XML.</p>
             </header>
 
-            <!-- TARJETAS PRINCIPALES -->
             <div class="cards-grid">
-                <!-- Libros -->
                 <div class="card">
                     <h3>📚 Catálogo de Libros <button onclick="cargarLibros()">Actualizar</button></h3>
                     <p>Libros disponibles en el sistema manejados mediante SOAP.</p>
                     <div id="tabla-libros-container">Cargando libros...</div>
                 </div>
 
-                <!-- Operaciones SOAP -->
                 <div class="card soap">
                     <h3>⚡ Operaciones SOAP <span class="badge">● Conectado</span></h3>
                     <p>Interactúa ejecutando métodos del servicio WSDL.</p>
@@ -341,16 +312,14 @@ app.get('/', (req, res) => {
                 </div>
             </div>
 
-            <!-- PRÉSTAMOS ACTIVOS -->
             <div class="card" style="margin-bottom: 30px;">
                 <h3>📖 Historial de Préstamos Activos</h3>
                 <div id="tabla-prestamos-container">Cargando préstamos...</div>
             </div>
 
-            <!-- PANEL EDUCATIVO SOAP REQUEST / RESPONSE -->
             <div class="educational-panel">
                 <h2>🔍 ¿Dónde está SOAP? (Panel de Inspección XML)</h2>
-                <p>Durante la exposición, puedes observar el flujo exacto de comunicación: la interfaz web hace una petición HTTP al backend en Express, y el backend **se comunica con el servicio SOAP enviando y recibiendo XML Envelope crudo**.</p>
+                <p>Durante la exposición, puedes observar el flujo exacto de comunicación: la interfaz web hace una petición HTTP al backend en Express, y el backend <strong>se comunica con el servicio SOAP enviando y recibiendo XML Envelope crudo</strong>.</p>
                 
                 <div class="flow-diagram">
                     <div class="flow-step">1. Usuario (Frontend)</div>
@@ -393,8 +362,8 @@ app.get('/', (req, res) => {
                         let html = '<table><thead><tr><th>Título</th><th>Autor</th><th>Disponibles</th></tr></thead><tbody>';
                         let selectHtml = '';
                         data.libros.forEach(l => {
-                            html += \`<tr><td>\${l.titulo}</td><td>\${l.autor}</td><td>\${l.disponibles}/\${l.total}</td></tr>\`;
-                            selectHtml += \`<option value="\${l.isbn}">\${l.titulo} (ISBN: \${l.isbn})</option>\`;
+                            html += '<tr><td>' + l.titulo + '</td><td>' + l.autor + '</td><td>' + l.disponibles + '/' + l.total + '</td></tr>';
+                            selectHtml += '<option value="' + l.isbn + '">' + l.titulo + ' (ISBN: ' + l.isbn + ')</option>';
                         });
                         html += '</tbody></table>';
                         document.getElementById('tabla-libros-container').innerHTML = html;
@@ -413,7 +382,7 @@ app.get('/', (req, res) => {
                 if(data.ok) {
                     let html = '<table><thead><tr><th>ISBN</th><th>Usuario</th><th>Fecha</th><th>Estado</th></tr></thead><tbody>';
                     data.prestamos.forEach(p => {
-                        html += \`<tr><td>\${p.isbn}</td><td>\${p.usuario}</td><td>\${p.fecha}</td><td>\${p.estado}</td></tr>\`;
+                        html += '<tr><td>' + p.isbn + '</td><td>' + p.usuario + '</td><td>' + p.fecha + '</td><td>' + p.estado + '</td></tr>';
                     });
                     html += '</tbody></table>';
                     document.getElementById('tabla-prestamos-container').innerHTML = html;
@@ -436,7 +405,7 @@ app.get('/', (req, res) => {
                 });
                 const data = await res.json();
                 if(data.ok) {
-                    document.getElementById('soap-resultado').innerText = \`📖 Resultado: \${data.resultado.titulo} - \${data.resultado.cantidad} ejemplar(es) disponible(s).\`;
+                    document.getElementById('soap-resultado').innerText = '📖 Resultado: ' + data.resultado.titulo + ' - ' + data.resultado.cantidad + ' ejemplar(es) disponible(s).';
                     actualizarTraza(data.traza);
                     cargarLibros();
                 }
@@ -452,7 +421,7 @@ app.get('/', (req, res) => {
                 });
                 const data = await res.json();
                 if(data.ok) {
-                    document.getElementById('soap-resultado').innerText = \`✅ \${data.resultado.mensaje}\`;
+                    document.getElementById('soap-resultado').innerText = '✅ ' + data.resultado.mensaje;
                     actualizarTraza(data.traza);
                     cargarLibros();
                 }
@@ -467,13 +436,12 @@ app.get('/', (req, res) => {
                 });
                 const data = await res.json();
                 if(data.ok) {
-                    document.getElementById('soap-resultado').innerText = \`↩️ \${data.resultado.mensaje}\`;
+                    document.getElementById('soap-resultado').innerText = '↩️ ' + data.resultado.mensaje;
                     actualizarTraza(data.traza);
                     cargarLibros();
                 }
             }
 
-            // Cargar inicial
             cargarLibros();
         </script>
     </body>
@@ -481,11 +449,10 @@ app.get('/', (req, res) => {
   `);
 });
 
-// Inicializar Servidor HTTP y montar servicio SOAP
 const servidor = http.createServer(app);
 
 servidor.listen(PORT, () => {
-  console.log(\`Servidor y Sistema de Biblioteca ejecutándose en el puerto \${PORT}\`);
+  console.log('Servidor ejecutándose en el puerto ' + PORT);
   soap.listen(servidor, '/soap', servicioSOAP, wsdlXML, function() {
     console.log('Servicio SOAP WSDL montado correctamente en /soap?wsdl');
   });
