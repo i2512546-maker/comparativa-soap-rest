@@ -4,7 +4,7 @@
   "description": "Proyecto academico para comparar SOAP vs REST utilizando Node.js y ExpressJS",
   "main": "servidorExpress.js",
   "scripts": {
-    "start": "node servidorCloud.js",
+    "start": "node servidorSimpleSOAP.js",
     "test": "node tests/pruebasREST.js"
   },
   "keywords": [
