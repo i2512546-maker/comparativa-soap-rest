@@ -24,7 +24,7 @@ let prestamos = [
 let ultimaTrazaSOAP = {
   operacion: "Ninguna",
   xmlRequest: "<!-- Haz clic en una operación SOAP arriba -->",
-  xmlResponse: "<!-- Aquí aparecerá la respuesta XML del servicio -->"
+  xmlResponse: "<!-- Aquí aparecerá la respuesta XML del servidor -->"
 };
 
 // =========================================================================
@@ -122,17 +122,16 @@ const wsdlXML = `
 `;
 
 // =========================================================================
-// 3. LÓGICA DE NEGOCIO DEL SERVICIO SOAP (Respuestas puras en XML/Estructura SOAP)
+// 3. LÓGICA DE NEGOCIO DEL SERVICIO SOAP
 // =========================================================================
 const servicioSOAP = {
   BibliotecaService: {
     BibliotecaPort: {
       
       ObtenerLibros: function(args, cb, headers, req) {
-        // Generar un XML estructurado directamente para demostrar SOAP puro
         let xmlLibros = "<ListaLibros>";
         libros.forEach(l => {
-          xmlLibros += \`<Libro><ISBN>\${l.isbn}</ISBN><Titulo>\${l.titulo}</Titulo><Autor>\${l.autor}</Autor><Disponibles>\${l.disponibles}</Disponibles></Libro>\`;
+          xmlLibros += "<Libro><ISBN>" + l.isbn + "</ISBN><Titulo>" + l.titulo + "</Titulo><Autor>" + l.autor + "</Autor><Disponibles>" + l.disponibles + "</Disponibles></Libro>";
         });
         xmlLibros += "</ListaLibros>";
         return { resultadoXML: xmlLibros };
@@ -193,7 +192,6 @@ function invocarSOAP(accion, args) {
 
       client[accion](args, function(err, result, rawResponse, soapHeader, rawRequest) {
         if (err) {
-          // Capturar SOAP Fault si ocurre
           ultimaTrazaSOAP = {
             operacion: accion,
             xmlRequest: rawRequest ? rawRequest : 'No disponible',
@@ -215,7 +213,7 @@ function invocarSOAP(accion, args) {
 }
 
 // =========================================================================
-// 5. ENDPOINTS DE LA APLICACIÓN (100% basados en comunicación SOAP)
+// 5. ENDPOINTS SOAP DE LA APLICACIÓN
 // =========================================================================
 app.get('/api/soap/libros', async (req, res) => {
   try {
@@ -398,7 +396,6 @@ app.get('/', (req, res) => {
                     const res = await fetch('/api/soap/libros');
                     const data = await res.json();
                     if(data.ok) {
-                        // Parsear el string XML que viene del servicio SOAP
                         const parser = new DOMParser();
                         const xmlDoc = parser.parseFromString(data.xmlBruto, "text/xml");
                         const librosNodes = xmlDoc.getElementsByTagName("Libro");
@@ -443,7 +440,6 @@ app.get('/', (req, res) => {
             function actualizarTraza(traza) {
                 if(!traza) return;
                 document.getElementById('lbl-operacion').innerText = traza.operacion;
-                
                 document.getElementById('xml-req').innerText = traza.xmlRequest;
                 document.getElementById('xml-res').innerText = traza.xmlResponse;
             }
