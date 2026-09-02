@@ -24,11 +24,11 @@ let prestamos = [
 let ultimaTrazaSOAP = {
   operacion: "Ninguna",
   xmlRequest: "<!-- Haz clic en una operación SOAP arriba -->",
-  xmlResponse: "<!-- Aquí aparecerá la respuesta XML del servidor -->"
+  xmlResponse: "<!-- Aquí aparecerá la respuesta XML del servicio -->"
 };
 
 // =========================================================================
-// 2. CONTRATO WSDL OFICIAL (Define qué operaciones existen y sus tipos)
+// 2. CONTRATO WSDL OFICIAL (El núcleo estricto de SOAP)
 // =========================================================================
 const wsdlXML = `
 <definitions name="BibliotecaService"
@@ -44,7 +44,7 @@ const wsdlXML = `
       <xsd:element name="ObtenerLibros"><xsd:complexType/></xsd:element>
       <xsd:element name="ObtenerLibrosResponse">
         <xsd:complexType><xsd:sequence>
-          <xsd:element name="LibrosJson" type="xsd:string"/>
+          <xsd:element name="resultadoXML" type="xsd:string"/>
         </xsd:sequence></xsd:complexType>
       </xsd:element>
 
@@ -122,20 +122,26 @@ const wsdlXML = `
 `;
 
 // =========================================================================
-// 3. LÓGICA DE NEGOCIO DEL SERVICIO SOAP
+// 3. LÓGICA DE NEGOCIO DEL SERVICIO SOAP (Respuestas puras en XML/Estructura SOAP)
 // =========================================================================
 const servicioSOAP = {
   BibliotecaService: {
     BibliotecaPort: {
       
       ObtenerLibros: function(args, cb, headers, req) {
-        return { LibrosJson: JSON.stringify(libros) };
+        // Generar un XML estructurado directamente para demostrar SOAP puro
+        let xmlLibros = "<ListaLibros>";
+        libros.forEach(l => {
+          xmlLibros += \`<Libro><ISBN>\${l.isbn}</ISBN><Titulo>\${l.titulo}</Titulo><Autor>\${l.autor}</Autor><Disponibles>\${l.disponibles}</Disponibles></Libro>\`;
+        });
+        xmlLibros += "</ListaLibros>";
+        return { resultadoXML: xmlLibros };
       },
 
       ConsultarDisponibilidad: function(args, cb, headers, req) {
         const libro = libros.find(l => l.isbn === args.isbn);
         if (!libro) {
-          return { disponible: false, cantidad: 0, titulo: "Libro no encontrado" };
+          throw { Fault: { Code: { Value: "soap:Server" }, Reason: { Text: "Libro no encontrado en el sistema SOAP" } } };
         }
         return { disponible: libro.disponibles > 0, cantidad: libro.disponibles, titulo: libro.titulo };
       },
@@ -143,7 +149,7 @@ const servicioSOAP = {
       RegistrarPrestamo: function(args, cb, headers, req) {
         const libro = libros.find(l => l.isbn === args.isbn);
         if (!libro || libro.disponibles <= 0) {
-          return { exito: false, mensaje: "No hay ejemplares disponibles para préstamo." };
+          throw { Fault: { Code: { Value: "soap:Client" }, Reason: { Text: "Stock agotado: No hay ejemplares disponibles para préstamo." } } };
         }
         libro.disponibles -= 1;
         prestamos.push({ 
@@ -153,21 +159,21 @@ const servicioSOAP = {
           fecha: new Date().toISOString().split('T')[0], 
           estado: "Activo" 
         });
-        return { exito: true, mensaje: "Préstamo registrado con éxito para " + (args.usuario || 'Usuario') + "." };
+        return { exito: true, mensaje: "Préstamo registrado vía SOAP con éxito para " + (args.usuario || 'Usuario') + "." };
       },
 
       RegistrarDevolucion: function(args, cb, headers, req) {
         const libro = libros.find(l => l.isbn === args.isbn);
         if (!libro) {
-          return { exito: false, mensaje: "ISBN no reconocido." };
+          throw { Fault: { Code: { Value: "soap:Client" }, Reason: { Text: "ISBN no reconocido en el contrato SOAP." } } };
         }
         if (libro.disponibles >= libro.total) {
-          return { exito: false, mensaje: "Todos los ejemplares ya están en la biblioteca." };
+          throw { Fault: { Code: { Value: "soap:Client" }, Reason: { Text: "Error: Todos los ejemplares ya se encuentran en la biblioteca." } } };
         }
         libro.disponibles += 1;
         const prestamoActivo = prestamos.find(p => p.isbn === args.isbn && p.estado === "Activo");
         if (prestamoActivo) prestamoActivo.estado = "Devuelto";
-        return { exito: true, mensaje: "Devolución registrada correctamente." };
+        return { exito: true, mensaje: "Devolución procesada correctamente por el servicio SOAP." };
       }
 
     }
@@ -175,7 +181,7 @@ const servicioSOAP = {
 };
 
 // =========================================================================
-// 4. CLIENTE SOAP INTERNO (Permite a Express consumir su propio SOAP)
+// 4. CLIENTE SOAP INTERNO
 // =========================================================================
 function invocarSOAP(accion, args) {
   return new Promise((resolve, reject) => {
@@ -186,16 +192,20 @@ function invocarSOAP(accion, args) {
       if (err) return reject(err);
 
       client[accion](args, function(err, result, rawResponse, soapHeader, rawRequest) {
-        if (err) return reject(err);
-
-        // Limpiar para mostrar XML legible en pantalla
-        const cleanReq = rawRequest ? rawRequest.replace(/</g, '&lt;').replace(/>/g, '&gt;') : 'No disponible';
-        const cleanRes = rawResponse ? rawResponse.replace(/</g, '&lt;').replace(/>/g, '&gt;') : 'No disponible';
+        if (err) {
+          // Capturar SOAP Fault si ocurre
+          ultimaTrazaSOAP = {
+            operacion: accion,
+            xmlRequest: rawRequest ? rawRequest : 'No disponible',
+            xmlResponse: rawResponse ? rawResponse : 'Error SOAP Fault detectado'
+          };
+          return reject(err);
+        }
 
         ultimaTrazaSOAP = {
           operacion: accion,
-          xmlRequest: cleanReq,
-          xmlResponse: cleanRes
+          xmlRequest: rawRequest ? rawRequest : 'No disponible',
+          xmlResponse: rawResponse ? rawResponse : 'No disponible'
         };
 
         resolve(result);
@@ -205,58 +215,57 @@ function invocarSOAP(accion, args) {
 }
 
 // =========================================================================
-// 5. RUTAS DEL BACKEND EXPRESS (API / Frontend)
+// 5. ENDPOINTS DE LA APLICACIÓN (100% basados en comunicación SOAP)
 // =========================================================================
-app.get('/api/libros', async (req, res) => {
+app.get('/api/soap/libros', async (req, res) => {
   try {
     const respuesta = await invocarSOAP('ObtenerLibros', {});
-    const lista = JSON.parse(respuesta.LibrosJson);
-    res.json({ ok: true, libros: lista, traza: ultimaTrazaSOAP });
+    res.json({ ok: true, xmlBruto: respuesta.resultadoXML, traza: ultimaTrazaSOAP });
   } catch (e) {
-    res.status(500).json({ ok: false, error: e.message });
+    res.status(500).json({ ok: false, error: e.message, traza: ultimaTrazaSOAP });
   }
 });
 
-app.post('/api/libros/disponibilidad', async (req, res) => {
+app.post('/api/soap/disponibilidad', async (req, res) => {
   try {
     const { isbn } = req.body;
     const respuesta = await invocarSOAP('ConsultarDisponibilidad', { isbn });
     res.json({ ok: true, resultado: respuesta, traza: ultimaTrazaSOAP });
   } catch (e) {
-    res.status(500).json({ ok: false, error: e.message });
+    res.status(500).json({ ok: false, error: e.message, traza: ultimaTrazaSOAP });
   }
 });
 
-app.post('/api/prestamos', async (req, res) => {
+app.post('/api/soap/prestamos', async (req, res) => {
   try {
     const { isbn, usuario } = req.body;
     const respuesta = await invocarSOAP('RegistrarPrestamo', { isbn, usuario });
     res.json({ ok: true, resultado: respuesta, traza: ultimaTrazaSOAP });
   } catch (e) {
-    res.status(500).json({ ok: false, error: e.message });
+    res.status(500).json({ ok: false, error: e.message, traza: ultimaTrazaSOAP });
   }
 });
 
-app.post('/api/devoluciones', async (req, res) => {
+app.post('/api/soap/devoluciones', async (req, res) => {
   try {
     const { isbn } = req.body;
     const respuesta = await invocarSOAP('RegistrarDevolucion', { isbn });
     res.json({ ok: true, resultado: respuesta, traza: ultimaTrazaSOAP });
   } catch (e) {
-    res.status(500).json({ ok: false, error: e.message });
+    res.status(500).json({ ok: false, error: e.message, traza: ultimaTrazaSOAP });
   }
 });
 
-app.get('/api/prestamos', (req, res) => {
+app.get('/api/soap/historial-prestamos', (req, res) => {
   res.json({ ok: true, prestamos });
 });
 
-app.get('/api/traza', (req, res) => {
+app.get('/api/soap/traza', (req, res) => {
   res.json(ultimaTrazaSOAP);
 });
 
 // =========================================================================
-// 6. INTERFAZ GRÁFICA EDUCATIVA (HTML / CSS / JS)
+// 6. INTERFAZ GRÁFICA PURA SOAP
 // =========================================================================
 app.get('/', (req, res) => {
   res.send(`
@@ -265,9 +274,9 @@ app.get('/', (req, res) => {
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Sistema de Biblioteca - Arquitectura SOAP vs REST</title>
+        <title>Sistema Empresarial SOAP - Biblioteca</title>
         <style>
-            :root { --primary: #2563eb; --bg: #0f172a; --card: #1e293b; --text: #f8fafc; --border: #334155; }
+            :root { --primary: #0284c7; --bg: #0f172a; --card: #1e293b; --text: #f8fafc; --border: #334155; }
             body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; }
             .container { max-width: 1100px; margin: 0 auto; }
             header { text-align: center; margin-bottom: 30px; }
@@ -276,13 +285,12 @@ app.get('/', (req, res) => {
             
             .cards-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-bottom: 30px; }
             .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.2); }
-            .card h3 { margin-top: 0; color: #f43f5e; display: flex; justify-content: space-between; align-items: center; }
-            .card.soap h3 { color: #38bdf8; }
+            .card h3 { margin-top: 0; color: #38bdf8; display: flex; justify-content: space-between; align-items: center; }
             
             .badge { background: #065f46; color: #34d399; padding: 2px 8px; border-radius: 12px; font-size: 12px; }
             
             button { background: var(--primary); color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: 500; transition: background 0.2s; }
-            button:hover { background: #1d4ed8; }
+            button:hover { background: #0369a1; }
             
             table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
             th, td { padding: 10px; text-align: left; border-bottom: 1px solid var(--border); }
@@ -297,40 +305,39 @@ app.get('/', (req, res) => {
             .code-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 15px; }
             @media (max-width: 768px) { .code-grid { grid-template-columns: 1fr; } }
             
-            pre { background: #0f172a; padding: 15px; border-radius: 6px; overflow-x: auto; font-size: 12px; color: #34d399; border: 1px solid var(--border); margin: 0; max-height: 250px; white-space: pre-wrap; word-break: break-all; }
+            pre { background: #0f172a; padding: 15px; border-radius: 6px; overflow-x: auto; font-family: monospace; font-size: 12px; color: #34d399; border: 1px solid var(--border); margin: 0; max-height: 250px; white-space: pre-wrap; word-break: break-all; }
             
             .links-section { margin-top: 20px; display: flex; gap: 15px; }
             .links-section a { color: #38bdf8; text-decoration: none; font-weight: 500; }
             .links-section a:hover { text-decoration: underline; }
             
             input, select { background: #0f172a; border: 1px solid var(--border); color: white; padding: 8px; border-radius: 6px; width: 100%; box-sizing: border-box; margin-bottom: 10px; }
-            
             .explanation-box { background: #0f172a; border-left: 4px solid #38bdf8; padding: 15px; margin: 15px 0; border-radius: 0 6px 6px 0; font-size: 14px; color: #cbd5e1; }
         </style>
     </head>
     <body>
         <div class="container">
             <header>
-                <h1>📚 Sistema de Gestión de Biblioteca (SOAP vs REST)</h1>
-                <p>Demostración interactiva de arquitectura orientada a servicios utilizando contratos WSDL y XML.</p>
+                <h1>🏛️ Sistema de Biblioteca Basado en SOAP</h1>
+                <p>Demostración estricta de Servicios Web SOAP, Contratos WSDL y Mensajería XML Envelope.</p>
             </header>
 
             <div class="cards-grid">
                 <div class="card">
-                    <h3>📚 Catálogo de Libros <button onclick="cargarLibros()">Actualizar</button></h3>
-                    <p>Libros disponibles en el sistema manejados mediante SOAP.</p>
-                    <div id="tabla-libros-container">Cargando libros...</div>
+                    <h3>📚 Catálogo SOAP <button onclick="cargarLibrosSOAP()">Consultar WSDL</button></h3>
+                    <p>Datos obtenidos directamente mediante el servicio XML SOAP.</p>
+                    <div id="tabla-libros-container">Cargando catálogo SOAP...</div>
                 </div>
 
-                <div class="card soap">
-                    <h3>⚡ Operaciones SOAP <span class="badge">● Conectado</span></h3>
-                    <p>Interactúa ejecutando métodos del servicio WSDL.</p>
+                <div class="card">
+                    <h3>⚡ Operaciones del Servicio <span class="badge">WSDL Activo</span></h3>
+                    <p>Ejecuta métodos definidos formalmente en el contrato.</p>
                     
-                    <label>Seleccionar Libro:</label>
+                    <label>Seleccionar Libro (ISBN):</label>
                     <select id="select-isbn"></select>
                     
                     <label>Nombre de Usuario:</label>
-                    <input type="text" id="input-usuario" value="Estudiante Demo" placeholder="Nombre...">
+                    <input type="text" id="input-usuario" value="Estudiante SOAP" placeholder="Nombre...">
 
                     <div style="display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap;">
                         <button onclick="soapDisponibilidad()">🔍 Disponibilidad</button>
@@ -342,62 +349,73 @@ app.get('/', (req, res) => {
             </div>
 
             <div class="card" style="margin-bottom: 30px;">
-                <h3>📖 Historial de Préstamos Activos</h3>
-                <div id="tabla-prestamos-container">Cargando préstamos...</div>
+                <h3>📖 Historial de Préstamos SOAP</h3>
+                <div id="tabla-prestamos-container">Cargando historial...</div>
             </div>
 
             <div class="educational-panel">
-                <h2>🔍 ¿Dónde está SOAP? (Panel de Inspección XML)</h2>
+                <h2>🔍 Panel de Inspección de Tráfico SOAP (XML Envelope)</h2>
                 
                 <div class="explanation-box">
-                    <strong>💡 ¿Cómo funciona esto?</strong> 
-                    Cuando haces clic en un botón, la interfaz web pide la acción al backend en Express. En lugar de usar JSON moderno, <strong>el backend se conecta al servicio SOAP empaquetando los datos en un sobre XML estricto (Request)</strong> y recibe de vuelta otro paquete en XML (Response). Abajo puedes ver el tráfico real en vivo.
+                    <strong>💡 Arquitectura SOAP Pura:</strong> 
+                    Toda la comunicación en este sistema viaja empaquetada estrictamente en <strong>Sobres XML (Envelope)</strong> definidos por el contrato WSDL. Aquí puedes inspeccionar en tiempo real el XML que se envía y se recibe del servicio.
                 </div>
 
                 <div class="flow-diagram">
-                    <div class="flow-step">1. Usuario (Frontend)</div>
+                    <div class="flow-step">1. Interfaz Web</div>
                     <div>➔</div>
-                    <div class="flow-step">2. Backend Express</div>
+                    <div class="flow-step">2. Cliente SOAP</div>
                     <div>➔</div>
                     <div class="flow-step">3. SOAP Request (XML)</div>
                     <div>➔</div>
-                    <div class="flow-step">4. Servicio SOAP</div>
+                    <div class="flow-step">4. Servidor SOAP</div>
                     <div>➔</div>
                     <div class="flow-step">5. SOAP Response (XML)</div>
                 </div>
 
-                <p><strong>Última Operación Ejecutada:</strong> <span id="lbl-operacion" style="color: #38bdf8;">Ninguna</span></p>
+                <p><strong>Última Operación SOAP Ejecutada:</strong> <span id="lbl-operacion" style="color: #38bdf8;">Ninguna</span></p>
 
                 <div class="code-grid">
                     <div>
-                        <p style="margin: 0 0 5px 0; color: #94a3b8; font-size: 13px;">📤 SOAP Request (Enviado al Servicio):</p>
+                        <p style="margin: 0 0 5px 0; color: #94a3b8; font-size: 13px;">📤 SOAP Request (Sobre XML Enviado):</p>
                         <pre><code id="xml-req">&lt;!-- Haz clic en una operación SOAP arriba --&gt;</code></pre>
                     </div>
                     <div>
-                        <p style="margin: 0 0 5px 0; color: #94a3b8; font-size: 13px;">📥 SOAP Response (Recibido del Servicio):</p>
+                        <p style="margin: 0 0 5px 0; color: #94a3b8; font-size: 13px;">📥 SOAP Response (Sobre XML Recibido):</p>
                         <pre><code id="xml-res">&lt;!-- Aquí verás el XML de respuesta --&gt;</code></pre>
                     </div>
                 </div>
 
                 <div class="links-section">
-                    <a href="/soap?wsdl" target="_blank">📄 Ver Contrato WSDL del Servicio</a>
-                    <a href="/api/libros" target="_blank">📊 Ver Datos JSON (Backend API)</a>
+                    <a href="/soap?wsdl" target="_blank">📄 Ver Contrato WSDL Oficial (XML)</a>
                 </div>
             </div>
         </div>
 
         <script>
-            async function cargarLibros() {
+            async function cargarLibrosSOAP() {
                 try {
-                    const res = await fetch('/api/libros');
+                    const res = await fetch('/api/soap/libros');
                     const data = await res.json();
                     if(data.ok) {
-                        let html = '<table><thead><tr><th>Título</th><th>Autor</th><th>Disponibles</th></tr></thead><tbody>';
+                        // Parsear el string XML que viene del servicio SOAP
+                        const parser = new DOMParser();
+                        const xmlDoc = parser.parseFromString(data.xmlBruto, "text/xml");
+                        const librosNodes = xmlDoc.getElementsByTagName("Libro");
+                        
+                        let html = '<table><thead><tr><th>ISBN</th><th>Título</th><th>Autor</th><th>Stock</th></tr></thead><tbody>';
                         let selectHtml = '';
-                        data.libros.forEach(l => {
-                            html += '<tr><td>' + l.titulo + '</td><td>' + l.autor + '</td><td>' + l.disponibles + '/' + l.total + '</td></tr>';
-                            selectHtml += '<option value="' + l.isbn + '">' + l.titulo + ' (ISBN: ' + l.isbn + ')</option>';
-                        });
+                        
+                        for (let i = 0; i < librosNodes.length; i++) {
+                            const isbn = librosNodes[i].getElementsByTagName("ISBN")[0].textContent;
+                            const titulo = librosNodes[i].getElementsByTagName("Titulo")[0].textContent;
+                            const autor = librosNodes[i].getElementsByTagName("Autor")[0].textContent;
+                            const disponibles = librosNodes[i].getElementsByTagName("Disponibles")[0].textContent;
+
+                            html += '<tr><td>' + isbn + '</td><td>' + titulo + '</td><td>' + autor + '</td><td>' + disponibles + '</td></tr>';
+                            selectHtml += '<option value="' + isbn + '">' + titulo + ' (ISBN: ' + isbn + ')</option>';
+                        }
+                        
                         html += '</tbody></table>';
                         document.getElementById('tabla-libros-container').innerHTML = html;
                         document.getElementById('select-isbn').innerHTML = selectHtml;
@@ -410,7 +428,7 @@ app.get('/', (req, res) => {
             }
 
             async function cargarPrestamos() {
-                const res = await fetch('/api/prestamos');
+                const res = await fetch('/api/soap/historial-prestamos');
                 const data = await res.json();
                 if(data.ok) {
                     let html = '<table><thead><tr><th>ISBN</th><th>Usuario</th><th>Fecha</th><th>Estado</th></tr></thead><tbody>';
@@ -422,38 +440,35 @@ app.get('/', (req, res) => {
                 }
             }
 
-            async function actualizarTraza(traza) {
+            function actualizarTraza(traza) {
                 if(!traza) return;
                 document.getElementById('lbl-operacion').innerText = traza.operacion;
                 
-                const txtReq = document.createElement('textarea');
-                txtReq.innerHTML = traza.xmlRequest;
-                document.getElementById('xml-req').innerText = txtReq.value;
-
-                const txtRes = document.createElement('textarea');
-                txtRes.innerHTML = traza.xmlResponse;
-                document.getElementById('xml-res').innerText = txtRes.value;
+                document.getElementById('xml-req').innerText = traza.xmlRequest;
+                document.getElementById('xml-res').innerText = traza.xmlResponse;
             }
 
             async function soapDisponibilidad() {
                 const isbn = document.getElementById('select-isbn').value;
-                const res = await fetch('/api/libros/disponibilidad', {
+                const res = await fetch('/api/soap/disponibilidad', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ isbn })
                 });
                 const data = await res.json();
                 if(data.ok) {
-                    document.getElementById('soap-resultado').innerText = '📖 Resultado: ' + data.resultado.titulo + ' - ' + data.resultado.cantidad + ' ejemplar(es) disponible(s).';
+                    document.getElementById('soap-resultado').innerText = '📖 ' + data.resultado.titulo + ' - ' + data.resultado.cantidad + ' ejemplar(es) disponible(s).';
                     actualizarTraza(data.traza);
-                    cargarLibros();
+                } else {
+                    document.getElementById('soap-resultado').innerText = '❌ Error SOAP Fault';
+                    actualizarTraza(data.traza);
                 }
             }
 
             async function soapPrestamo() {
                 const isbn = document.getElementById('select-isbn').value;
                 const usuario = document.getElementById('input-usuario').value || 'Estudiante';
-                const res = await fetch('/api/prestamos', {
+                const res = await fetch('/api/soap/prestamos', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ isbn, usuario })
@@ -462,13 +477,16 @@ app.get('/', (req, res) => {
                 if(data.ok) {
                     document.getElementById('soap-resultado').innerText = '✅ ' + data.resultado.mensaje;
                     actualizarTraza(data.traza);
-                    cargarLibros();
+                    cargarLibrosSOAP();
+                } else {
+                    document.getElementById('soap-resultado').innerText = '❌ Error SOAP Fault';
+                    actualizarTraza(data.traza);
                 }
             }
 
             async function soapDevolucion() {
                 const isbn = document.getElementById('select-isbn').value;
-                const res = await fetch('/api/devoluciones', {
+                const res = await fetch('/api/soap/devoluciones', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ isbn })
@@ -477,11 +495,14 @@ app.get('/', (req, res) => {
                 if(data.ok) {
                     document.getElementById('soap-resultado').innerText = '↩️ ' + data.resultado.mensaje;
                     actualizarTraza(data.traza);
-                    cargarLibros();
+                    cargarLibrosSOAP();
+                } else {
+                    document.getElementById('soap-resultado').innerText = '❌ Error SOAP Fault';
+                    actualizarTraza(data.traza);
                 }
             }
 
-            cargarLibros();
+            cargarLibrosSOAP();
         </script>
     </body>
     </html>
@@ -494,9 +515,8 @@ app.get('/', (req, res) => {
 const servidor = http.createServer(app);
 
 servidor.listen(PORT, () => {
-  console.log('Servidor ejecutándose en el puerto ' + PORT);
+  console.log('Servidor SOAP puro ejecutándose en el puerto ' + PORT);
   
-  // La librería soap enlaza el servidor HTTP con el contrato WSDL y la lógica
   soap.listen(servidor, '/soap', servicioSOAP, wsdlXML, function() {
     console.log('Servicio SOAP WSDL montado correctamente en /soap?wsdl');
   });
