@@ -1,0 +1,27 @@
+{
+  "name": "comparativa-soap-rest",
+  "version": "1.0.0",
+  "description": "Proyecto academico para comparar SOAP vs REST utilizando Node.js y ExpressJS",
+  "main": "servidorExpress.js",
+  "scripts": {
+    "start": "node servidorCloud.js",
+    "test": "node tests/pruebasREST.js"
+  },
+  "keywords": [
+    "soap",
+    "rest",
+    "express",
+    "nodejs",
+    "biblioteca",
+    "wsdl"
+  ],
+  "author": "",
+  "license": "ISC",
+  "engines": {
+    "node": ">=16"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "soap": "^1.0.0"
+  }
+}

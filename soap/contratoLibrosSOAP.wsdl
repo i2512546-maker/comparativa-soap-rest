@@ -1,0 +1,217 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://schemas.xmlsoap.org/wsdl/"
+             xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/"
+             xmlns:tns="http://biblioteca.com/servicios/libros"
+             xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+             name="LibroService"
+             targetNamespace="http://biblioteca.com/servicios/libros">
+
+  <types>
+    <xsd:schema targetNamespace="http://biblioteca.com/servicios/libros">
+
+      <xsd:element name="ObtenerLibros">
+        <xsd:complexType/>
+      </xsd:element>
+      <xsd:element name="ObtenerLibrosResponse">
+        <xsd:complexType>
+          <xsd:sequence>
+            <xsd:element name="Libros" minOccurs="0" maxOccurs="unbounded">
+              <xsd:complexType>
+                <xsd:sequence>
+                  <xsd:element name="Codigo" type="xsd:string"/>
+                  <xsd:element name="Titulo" type="xsd:string"/>
+                  <xsd:element name="Autor" type="xsd:string"/>
+                  <xsd:element name="Anio" type="xsd:int"/>
+                  <xsd:element name="Disponible" type="xsd:boolean"/>
+                </xsd:sequence>
+              </xsd:complexType>
+            </xsd:element>
+          </xsd:sequence>
+        </xsd:complexType>
+      </xsd:element>
+
+      <xsd:element name="BuscarLibro">
+        <xsd:complexType>
+          <xsd:sequence>
+            <xsd:element name="Codigo" type="xsd:string"/>
+          </xsd:sequence>
+        </xsd:complexType>
+      </xsd:element>
+      <xsd:element name="BuscarLibroResponse">
+        <xsd:complexType>
+          <xsd:sequence>
+            <xsd:element name="Codigo" type="xsd:string"/>
+            <xsd:element name="Titulo" type="xsd:string"/>
+            <xsd:element name="Autor" type="xsd:string"/>
+            <xsd:element name="Anio" type="xsd:int"/>
+            <xsd:element name="Disponible" type="xsd:boolean"/>
+          </xsd:sequence>
+        </xsd:complexType>
+      </xsd:element>
+
+      <xsd:element name="RegistrarLibro">
+        <xsd:complexType>
+          <xsd:sequence>
+            <xsd:element name="Codigo" type="xsd:string"/>
+            <xsd:element name="Titulo" type="xsd:string"/>
+            <xsd:element name="Autor" type="xsd:string"/>
+            <xsd:element name="Anio" type="xsd:int" minOccurs="0"/>
+            <xsd:element name="Disponible" type="xsd:boolean" minOccurs="0"/>
+          </xsd:sequence>
+        </xsd:complexType>
+      </xsd:element>
+      <xsd:element name="RegistrarLibroResponse">
+        <xsd:complexType>
+          <xsd:sequence>
+            <xsd:element name="Codigo" type="xsd:string"/>
+            <xsd:element name="Titulo" type="xsd:string"/>
+            <xsd:element name="Autor" type="xsd:string"/>
+            <xsd:element name="Anio" type="xsd:int"/>
+            <xsd:element name="Disponible" type="xsd:boolean"/>
+            <xsd:element name="Mensaje" type="xsd:string"/>
+          </xsd:sequence>
+        </xsd:complexType>
+      </xsd:element>
+
+      <xsd:element name="ActualizarLibro">
+        <xsd:complexType>
+          <xsd:sequence>
+            <xsd:element name="Codigo" type="xsd:string"/>
+            <xsd:element name="Titulo" type="xsd:string" minOccurs="0"/>
+            <xsd:element name="Autor" type="xsd:string" minOccurs="0"/>
+            <xsd:element name="Anio" type="xsd:int" minOccurs="0"/>
+            <xsd:element name="Disponible" type="xsd:boolean" minOccurs="0"/>
+          </xsd:sequence>
+        </xsd:complexType>
+      </xsd:element>
+      <xsd:element name="ActualizarLibroResponse">
+        <xsd:complexType>
+          <xsd:sequence>
+            <xsd:element name="Codigo" type="xsd:string"/>
+            <xsd:element name="Titulo" type="xsd:string"/>
+            <xsd:element name="Autor" type="xsd:string"/>
+            <xsd:element name="Anio" type="xsd:int"/>
+            <xsd:element name="Disponible" type="xsd:boolean"/>
+            <xsd:element name="Mensaje" type="xsd:string"/>
+          </xsd:sequence>
+        </xsd:complexType>
+      </xsd:element>
+
+      <xsd:element name="EliminarLibro">
+        <xsd:complexType>
+          <xsd:sequence>
+            <xsd:element name="Codigo" type="xsd:string"/>
+          </xsd:sequence>
+        </xsd:complexType>
+      </xsd:element>
+      <xsd:element name="EliminarLibroResponse">
+        <xsd:complexType>
+          <xsd:sequence>
+            <xsd:element name="Codigo" type="xsd:string"/>
+            <xsd:element name="Titulo" type="xsd:string"/>
+            <xsd:element name="Autor" type="xsd:string"/>
+            <xsd:element name="Anio" type="xsd:int"/>
+            <xsd:element name="Disponible" type="xsd:boolean"/>
+            <xsd:element name="Mensaje" type="xsd:string"/>
+          </xsd:sequence>
+        </xsd:complexType>
+      </xsd:element>
+
+    </xsd:schema>
+  </types>
+
+  <message name="ObtenerLibrosInput">
+    <part name="parameters" element="tns:ObtenerLibros"/>
+  </message>
+  <message name="ObtenerLibrosOutput">
+    <part name="parameters" element="tns:ObtenerLibrosResponse"/>
+  </message>
+
+  <message name="BuscarLibroInput">
+    <part name="parameters" element="tns:BuscarLibro"/>
+  </message>
+  <message name="BuscarLibroOutput">
+    <part name="parameters" element="tns:BuscarLibroResponse"/>
+  </message>
+
+  <message name="RegistrarLibroInput">
+    <part name="parameters" element="tns:RegistrarLibro"/>
+  </message>
+  <message name="RegistrarLibroOutput">
+    <part name="parameters" element="tns:RegistrarLibroResponse"/>
+  </message>
+
+  <message name="ActualizarLibroInput">
+    <part name="parameters" element="tns:ActualizarLibro"/>
+  </message>
+  <message name="ActualizarLibroOutput">
+    <part name="parameters" element="tns:ActualizarLibroResponse"/>
+  </message>
+
+  <message name="EliminarLibroInput">
+    <part name="parameters" element="tns:EliminarLibro"/>
+  </message>
+  <message name="EliminarLibroOutput">
+    <part name="parameters" element="tns:EliminarLibroResponse"/>
+  </message>
+
+  <portType name="LibroPortType">
+    <operation name="ObtenerLibros">
+      <input message="tns:ObtenerLibrosInput"/>
+      <output message="tns:ObtenerLibrosOutput"/>
+    </operation>
+    <operation name="BuscarLibro">
+      <input message="tns:BuscarLibroInput"/>
+      <output message="tns:BuscarLibroOutput"/>
+    </operation>
+    <operation name="RegistrarLibro">
+      <input message="tns:RegistrarLibroInput"/>
+      <output message="tns:RegistrarLibroOutput"/>
+    </operation>
+    <operation name="ActualizarLibro">
+      <input message="tns:ActualizarLibroInput"/>
+      <output message="tns:ActualizarLibroOutput"/>
+    </operation>
+    <operation name="EliminarLibro">
+      <input message="tns:EliminarLibroInput"/>
+      <output message="tns:EliminarLibroOutput"/>
+    </operation>
+  </portType>
+
+  <binding name="LibroBinding" type="tns:LibroPortType">
+    <soap:binding style="document" transport="http://schemas.xmlsoap.org/soap/http"/>
+    <operation name="ObtenerLibros">
+      <soap:operation soapAction="http://biblioteca.com/servicios/libros/ObtenerLibros"/>
+      <input><soap:body use="literal"/></input>
+      <output><soap:body use="literal"/></output>
+    </operation>
+    <operation name="BuscarLibro">
+      <soap:operation soapAction="http://biblioteca.com/servicios/libros/BuscarLibro"/>
+      <input><soap:body use="literal"/></input>
+      <output><soap:body use="literal"/></output>
+    </operation>
+    <operation name="RegistrarLibro">
+      <soap:operation soapAction="http://biblioteca.com/servicios/libros/RegistrarLibro"/>
+      <input><soap:body use="literal"/></input>
+      <output><soap:body use="literal"/></output>
+    </operation>
+    <operation name="ActualizarLibro">
+      <soap:operation soapAction="http://biblioteca.com/servicios/libros/ActualizarLibro"/>
+      <input><soap:body use="literal"/></input>
+      <output><soap:body use="literal"/></output>
+    </operation>
+    <operation name="EliminarLibro">
+      <soap:operation soapAction="http://biblioteca.com/servicios/libros/EliminarLibro"/>
+      <input><soap:body use="literal"/></input>
+      <output><soap:body use="literal"/></output>
+    </operation>
+  </binding>
+
+  <service name="LibroService">
+    <documentation>Servicio de gestion de libros de la biblioteca</documentation>
+    <port name="LibroPort" binding="tns:LibroBinding">
+      <soap:address location="http://localhost:3000/soap"/>
+    </port>
+  </service>
+
+</definitions>
